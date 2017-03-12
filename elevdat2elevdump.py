@@ -35,7 +35,7 @@ def ReadElevDat(contents, page, returntype):
     elif returntype == "textures":
         heights = 0
     else:
-        "ReadElevDat was not provided a value returntype."
+        "ReadElevDat was not provided a valid returntype."
         return -1
     #Copied from a really old LUA script for Cheat Engine
     scanAddress = AOBScan([0xFA, 0xFA, 0x0E, 0x80], contents, page)
