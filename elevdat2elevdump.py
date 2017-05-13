@@ -5,29 +5,33 @@
 #The results of this program will need to be trimmed by 1 block on the west and north, which Xaoc elevdump can do.
 #Different trimmed results can be easily combined with a text editor.
 
-def readbytes(contents, address, bytenum):
-    result = 0
-    i = bytenum-1
-    while i >= 0:
-        result = result + int(contents[address+i])*256**i
-        i -= 1
-    return result
+def readbytes(contents, address, bytenum):    
+    b = bytes(contents[address:address+bytenum])
+    return int.from_bytes(b, byteorder='little', signed=False)
 
-def AOBScan(AOB, contents, desiredresult): #Returns address at which the AOB is located.
-    resultnumber = 0
+
+def AOBScan(AOB, contents): #Returns address at which the AOB is located.
     address = 0
-    while address <= len(contents)-len(AOB):
+    
+    searchlen = len(contents)-len(AOB)
+    AOBlen = len(AOB)
+
+    found = []
+    
+    while address <= searchlen:
         j=0
-        while j<len(AOB) and contents[address+j]==AOB[j]:
+        while j < AOBlen and contents[address+j]==AOB[j]:
             j+=1
-            if j == len(AOB):
-                resultnumber += 1
-                if resultnumber == desiredresult:
-                    return address
+            if j == AOBlen:
+                found.append(address)
+                    #return address
 #                print(address)
         address += 1
 #    print("AOB scan result",desiredresult,"not found.")
-    return -1
+    return found
+    #return -1
+
+scanAddresses = None
 
 def ReadElevDat(contents, page, returntype):
     if returntype == "heights":
@@ -37,11 +41,15 @@ def ReadElevDat(contents, page, returntype):
     else:
         "ReadElevDat was not provided a valid returntype."
         return -1
+    
     #Copied from a really old LUA script for Cheat Engine
-    scanAddress = AOBScan([0xFA, 0xFA, 0x0E, 0x80], contents, page)
-    if scanAddress==-1:
+    global scanAddresses
+    if scanAddresses == None:
+        scanAddresses = AOBScan([0xFA, 0xFA, 0x0E, 0x80], contents)
+    if scanAddresses == [] or page > len(scanAddresses):
         return [-1]
-    addressStart = scanAddress+0x0000000E
+    
+    addressStart = scanAddresses[page-1]+0x0000000E
     result = []
     if heights==1:
         addressEnd = addressStart+0x0000FFFF
@@ -105,6 +113,3 @@ else:
                     outputfile.close()
                     print("Generated file convert_elevdump_page"+str(page)+".txt.")
                 page += 1
-
-
-
