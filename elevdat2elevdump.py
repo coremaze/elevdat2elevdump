@@ -1,3 +1,7 @@
+#Written for Python 3.6.0
+#For use in conjunction with Xaoc elevdump editor to produce elevdumps from elev.dat.
+#Xaoc elevdump editor: http://xaoc.50webs.com/terrain/ - will require msstdfmt.dll
+
 from struct import *
 from IDX import *
 from Page import *
