@@ -1,115 +1,58 @@
-#ChrisMiuchiz
-#Written for Python 3.6.0
-#For use in conjunction with Xaoc elevdump editor to produce elevdumps from elev.dat.
-#Xaoc elevdump editor: http://xaoc.50webs.com/terrain/ - will require msstdfmt.dll
-#The results of this program will need to be trimmed by 1 block on the west and north, which Xaoc elevdump can do.
-#Different trimmed results can be easily combined with a text editor.
+from struct import *
+from IDX import *
+from Page import *
 
-def readbytes(contents, address, bytenum):    
-    b = bytes(contents[address:address+bytenum])
-    return int.from_bytes(b, byteorder='little', signed=False)
+nDat = input("Enter elev.dat: ")
+nIdx = nDat[:-3]+'idx'
+print(nIdx)
 
+entries = GetEntries(nIdx, nDat)
 
-def AOBScan(AOB, contents): #Returns address at which the AOB is located.
-    address = 0
+hDat = open(nDat, 'rb')
+cDat = hDat.read()
+hDat.close()
+
+HEIGHTS_LEN = 0x10000
+HEIGHTS_WIDTH = 4
+TEXTURES_LEN = 0x8000
+TEXTURES_WIDTH = 2
+
+pages = []
+for entry in entries:
     
-    searchlen = len(contents)-len(AOB)
-    AOBlen = len(AOB)
-
-    found = []
+    if entry.length != 0x1800E:
+        continue
     
-    while address <= searchlen:
-        j=0
-        while j < AOBlen and contents[address+j]==AOB[j]:
-            j+=1
-            if j == AOBlen:
-                found.append(address)
-                    #return address
-#                print(address)
-        address += 1
-#    print("AOB scan result",desiredresult,"not found.")
-    return found
-    #return -1
-
-scanAddresses = None
-
-def ReadElevDat(contents, page, returntype):
-    if returntype == "heights":
-        heights = 1
-    elif returntype == "textures":
-        heights = 0
-    else:
-        "ReadElevDat was not provided a valid returntype."
-        return -1
+    p = Page(entry.x, entry.z, [], [])
+    pages.append(p)
     
-    #Copied from a really old LUA script for Cheat Engine
-    global scanAddresses
-    if scanAddresses == None:
-        scanAddresses = AOBScan([0xFA, 0xFA, 0x0E, 0x80], contents)
-    if scanAddresses == [] or page > len(scanAddresses):
-        return [-1]
-    
-    addressStart = scanAddresses[page-1]+0x0000000E
-    result = []
-    if heights==1:
-        addressEnd = addressStart+0x0000FFFF
-        addressDiff = addressEnd - addressStart
-        i=0
-        while i<=addressDiff:
-            longInt=readbytes(contents, addressStart+i, 4)
-            if longInt>=4294867295 and longInt<=4294967295:
-                longInt=longInt-4294967296
-            result.append(longInt)
-            i += 4
-    else:
-        addressStartTextures=addressStart+0x00010000
-        addressEnd = addressStartTextures+0x00007FFF
-        addressDiff = addressEnd - addressStartTextures
-        i=0
-        while i<=addressDiff:
-            result.append(readbytes(contents, addressStartTextures+i, 2))
-            i += 2
-    return result
+    TerrainStart = entry.address+0x0E
+    TexturesStart = TerrainStart + HEIGHTS_LEN
 
-#start
-try:
-    file = open(input("Enter elevdat to convert: "),"rb")
-except:
-    print("File could not be opened.")
-else:
-    print("File opened successfully. Reading...")
-    try:
-        filecontents = file.read()
-    except:
-        print("Error reading file.")
-    else:
-        print("File successfully read.")
-        file.close()
-        page = 1
-        EOF = False
-        print("Starting to convert file...")
-        while not EOF:
-            textures = ReadElevDat(filecontents, page, "textures")
-            if textures[0]==-1:
-                print("End of file reached.")
-                EOF = True
-            else:
-                heights = ReadElevDat(filecontents, page, "heights")
-                try:
-                    outputfile = open ("convert_elevdump_page"+str(page)+".txt","w")
-                except:
-                    print("Error opening file convert_elevdump_page"+str(page)+".txt")
-                else:
-                    outputfile.write("elevdump version 2\n")#Python will interpret \n (0x0A) as \r\n (0x0D, 0x0A), and if that changes, xaoc elevdump editor won't be able to read this.
-                    h=0
-                    i=0
-                    while h<=127:
-                        t=0
-                        while t<=127:
-                           outputfile.write("0 0 " + str(h) + " " + str(t) + " 1 1 1 " + str(textures[i]) + " "+ str(heights[i]) + "\n")
-                           t += 1
-                           i += 1
-                        h += 1
-                    outputfile.close()
-                    print("Generated file convert_elevdump_page"+str(page)+".txt.")
-                page += 1
+    for i in range(0, HEIGHTS_LEN//HEIGHTS_WIDTH):
+        p.heights.append( unpack('i', cDat[ TerrainStart+i*HEIGHTS_WIDTH : TerrainStart+(i+1)*HEIGHTS_WIDTH ])[0] )
+
+    for i in range(0, TEXTURES_LEN//TEXTURES_WIDTH):
+        p.textures.append( unpack('H', cDat[ TexturesStart+i*TEXTURES_WIDTH : TexturesStart+(i+1)*TEXTURES_WIDTH ])[0] )
+
+print("%d page(s) found." % len(pages))
+hOut = open('convert_elevdump.txt', 'w')
+hOut.write("elevdump version 2\n")
+pages = sorted(pages, key=lambda x: (x.x, x.z), reverse=False)
+for pagenum, p in enumerate(pages):
+    for x in range(0, 129):
+        for z in range(0, 129):
+            i = (x*128 + z)
+
+            #Put empty border on north and east side and let xaoc take it out
+            if z == 128 or x == 128:
+                hOut.write("%d %d %d %d 1 1 1 0 0\n" % (p.x, p.z, x, z))
+                continue
+
+            line = "%d %d %d %d 1 1 1 %d %d\n" % (p.x, p.z, x, z, p.textures[i], p.heights[i])
+            hOut.write(line)
+    print("%d page(s) complete." % pagenum)
+
+hOut.close()
+            
+
