@@ -26,11 +26,13 @@ TEXTURES_LEN = 0x8000
 TEXTURES_WIDTH = 2
 
 pages = []
+#Create a page for every valid entry
 for entry in entries:
-    
-    if entry.length != 0x1800E:
+
+    if entry.length < HEIGHTS_LEN+TEXTURES_LEN:
+        print("Ignoring entry pointing to %s because its length is %s" % (hex(entry.address), hex(entry.length)))
         continue
-    
+        
     p = Page(entry.x, entry.z, [], [])
     pages.append(p)
     
@@ -42,23 +44,26 @@ for entry in entries:
 
     for i in range(0, TEXTURES_LEN//TEXTURES_WIDTH):
         p.textures.append( unpack('H', cDat[ TexturesStart+i*TEXTURES_WIDTH : TexturesStart+(i+1)*TEXTURES_WIDTH ])[0] )
-
+        
 print("%d page(s) found." % len(pages))
+
 hOut = open('convert_elevdump.txt', 'w')
 hOut.write("elevdump version 2\n")
+
+#Pages need to be written in a from south to north, then east to west, or there will be gaps in the result.
 pages = sorted(pages, key=lambda x: (x.x, x.z), reverse=False)
 for pagenum, p in enumerate(pages):
     for x in range(0, 129):
         for z in range(0, 129):
             i = (x*128 + z)
 
-            #Put empty border on north and east side and let xaoc take it out
             if z == 128 or x == 128:
+                #Put empty border on north and east side and let xaoc editor take it out
                 hOut.write("%d %d %d %d 1 1 1 0 0\n" % (p.x, p.z, x, z))
-                continue
+            else:
+                #Write normally
+                hOut.write( "%d %d %d %d 1 1 1 %d %d\n" % (p.x, p.z, x, z, p.textures[i], p.heights[i]) )
 
-            line = "%d %d %d %d 1 1 1 %d %d\n" % (p.x, p.z, x, z, p.textures[i], p.heights[i])
-            hOut.write(line)
     print("%d page(s) complete." % (pagenum+1))
 
 hOut.close()
