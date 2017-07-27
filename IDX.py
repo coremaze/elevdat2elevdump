@@ -10,7 +10,7 @@ class Entry():
     def Details(s):
         print("Address: %s\nX, Z: %s, %s\ndata1: %s\nLocation: %s\n" % (hex(s.address),s.x,s.z,s.data1,hex(s.location)))
 
-def GetEntries(nIdx, nDat):
+def GetEntries(nIdx, nDat, awtype):
     #read idx file
     hIdx = open(nIdx, 'rb')
     cIdx = hIdx.read()
@@ -57,9 +57,17 @@ def GetEntries(nIdx, nDat):
 
     lstentries = []
 
-    IDX_OFFSET = 0x12
 
-    ENTRY_LENTGTH = 0x0C
+
+    if awtype == 6:
+        ENTRY_LENTGTH = 0x0C
+        IDX_OFFSET = 0x12
+    elif awtype == 5:
+        ENTRY_LENTGTH = 0x0C
+        IDX_OFFSET = 0x1E
+    elif awtype == 4:
+        ENTRY_LENTGTH = 0x8
+        IDX_OFFSET = 0x12
 
     BlockStart = IDXStart
 
@@ -72,12 +80,16 @@ def GetEntries(nIdx, nDat):
 
         #Get entries until entry limit
         for entrycount in range(0, entries):
-            address, data1, data2, data3, data4, data5, data6, data7, data8 = unpack("Ibbbbbbbb", cIdx[loc:loc+ENTRY_LENTGTH])
-##            for x in [address, data1, data2, data3, data4, data5, data6, data7, data8]:
-##                print(hex(x), end=' ')
-##            print()
+            if awtype == 6 or awtype == 5:
+                address, data1, data2, data3, data4, data5, data6, data7, data8 = unpack("Ibbbbbbbb", cIdx[loc:loc+ENTRY_LENTGTH])
+                x, z = data1, data5
+            elif awtype == 4:
+                address, data1, data2, data3, data4 = unpack("Ibbbb", cIdx[loc:loc+ENTRY_LENTGTH])
+                x, z = data1, data3
+                
+            #print(hex(address), hex(loc))
             length = unpack('I', cDat[address+2:address+6])[0]
-            x, z = data1, data5
+            
 
             #Entries whose data length are 0x0E contain no data
             if length != 0x0E:

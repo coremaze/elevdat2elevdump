@@ -8,9 +8,13 @@ from Page import *
 
 nDat = input("Enter elev.dat: ")
 nIdx = nDat[:-3]+'idx'
-print(nIdx)
 
-entries = GetEntries(nIdx, nDat)
+awtype = int(input('Enter AW version (4, 5, or 6): '))
+if awtype not in range(4, 7):
+    print("Unfamiliar AW version.")
+    quit()
+
+entries = GetEntries(nIdx, nDat, awtype)
 
 hDat = open(nDat, 'rb')
 cDat = hDat.read()
@@ -55,7 +59,7 @@ for pagenum, p in enumerate(pages):
 
             line = "%d %d %d %d 1 1 1 %d %d\n" % (p.x, p.z, x, z, p.textures[i], p.heights[i])
             hOut.write(line)
-    print("%d page(s) complete." % pagenum)
+    print("%d page(s) complete." % (pagenum+1))
 
 hOut.close()
             
