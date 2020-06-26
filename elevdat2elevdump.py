@@ -1,71 +1,70 @@
-#Written for Python 3.6.0
-#For use in conjunction with Xaoc elevdump editor to produce elevdumps from elev.dat.
-#Xaoc elevdump editor: http://xaoc.50webs.com/terrain/ - will require msstdfmt.dll
-
 from struct import *
 from IDX import *
 from Page import *
+from awmap import Map
+import argparse
 
-nDat = input("Enter elev.dat: ")
-nIdx = nDat[:-3]+'idx'
+def ApplyDatabaseToMap(elevdump, databasePath, awtype):
+    nIdx = databasePath + '.idx'
+    nDat = databasePath + '.dat'
+    print(f'Opening {nDat} and {nIdx}')
+    entries = GetEntries(nIdx, nDat, awtype)
 
-awtype = int(input('Enter AW version (4, 5, or 6): '))
-if awtype not in range(4, 7):
-    print("Unfamiliar AW version.")
-    quit()
+    with open(nDat, 'rb') as f:
+        cDat = f.read()
 
-entries = GetEntries(nIdx, nDat, awtype)
+    pages = []
+    #Create a page for every valid entry
+    for entry in entries:
 
-hDat = open(nDat, 'rb')
-cDat = hDat.read()
-hDat.close()
+        if entry.length < HEIGHTS_LEN+TEXTURES_LEN:
+            print("Ignoring entry pointing to %s because its length is %s" % (hex(entry.address), hex(entry.length)))
+            continue
+            
+        p = Page(entry.x, entry.z, [], [])
+        pages.append(p)
+        
+        TerrainStart = entry.address+0x0E
+        TexturesStart = TerrainStart + HEIGHTS_LEN
+
+        for i in range(0, HEIGHTS_LEN//HEIGHTS_WIDTH):
+            p.heights.append( unpack('i', cDat[ TerrainStart+i*HEIGHTS_WIDTH : TerrainStart+(i+1)*HEIGHTS_WIDTH ])[0] )
+
+        for i in range(0, TEXTURES_LEN//TEXTURES_WIDTH):
+            p.textures.append( unpack('H', cDat[ TexturesStart+i*TEXTURES_WIDTH : TexturesStart+(i+1)*TEXTURES_WIDTH ])[0] )
+            
+    print("%d page(s) found." % len(pages))
+
+    for p in pages:
+        for x in range(128):
+            for z in range(128):
+                texture = p.textures[x*128 + z]
+                height = p.heights[x*128 + z]
+                elevdump.SetPixel((p.x, p.z), (x, z), height, texture)
+
 
 HEIGHTS_LEN = 0x10000
 HEIGHTS_WIDTH = 4
 TEXTURES_LEN = 0x8000
 TEXTURES_WIDTH = 2
 
-pages = []
-#Create a page for every valid entry
-for entry in entries:
+parser = argparse.ArgumentParser(description='Converts elev databases to elevdumps.')
+parser.add_argument('databases', type=str, help='Paths to databases, separated by the | symbol')
+parser.add_argument('output', type=str, help='File to write resulting elevdump to')
+parser.add_argument('version', type=int, help='AW version of the databases')
+args = parser.parse_args()
 
-    if entry.length < HEIGHTS_LEN+TEXTURES_LEN:
-        print("Ignoring entry pointing to %s because its length is %s" % (hex(entry.address), hex(entry.length)))
-        continue
-        
-    p = Page(entry.x, entry.z, [], [])
-    pages.append(p)
-    
-    TerrainStart = entry.address+0x0E
-    TexturesStart = TerrainStart + HEIGHTS_LEN
+databases = args.databases.split('|')
+output = args.output
+awtype = args.version
 
-    for i in range(0, HEIGHTS_LEN//HEIGHTS_WIDTH):
-        p.heights.append( unpack('i', cDat[ TerrainStart+i*HEIGHTS_WIDTH : TerrainStart+(i+1)*HEIGHTS_WIDTH ])[0] )
+if awtype not in range(4, 7):
+    print("Unfamiliar AW version.")
+    quit()
 
-    for i in range(0, TEXTURES_LEN//TEXTURES_WIDTH):
-        p.textures.append( unpack('H', cDat[ TexturesStart+i*TEXTURES_WIDTH : TexturesStart+(i+1)*TEXTURES_WIDTH ])[0] )
-        
-print("%d page(s) found." % len(pages))
+elevdump = Map()
 
-hOut = open('convert_elevdump.txt', 'w')
-hOut.write("elevdump version 2\n")
+for database in databases:
+    ApplyDatabaseToMap(elevdump, database, awtype)
 
-#Pages need to be written in a from south to north, then east to west, or there will be gaps in the result.
-pages = sorted(pages, key=lambda x: (x.x, x.z), reverse=False)
-for pagenum, p in enumerate(pages):
-    for x in range(0, 129):
-        for z in range(0, 129):
-            i = (x*128 + z)
-
-            if z == 128 or x == 128:
-                #Put empty border on north and east side and let xaoc editor take it out
-                hOut.write("%d %d %d %d 1 1 1 0 0\n" % (p.x, p.z, x, z))
-            else:
-                #Write normally
-                hOut.write( "%d %d %d %d 1 1 1 %d %d\n" % (p.x, p.z, x, z, p.textures[i], p.heights[i]) )
-
-    print("%d page(s) complete." % (pagenum+1))
-
-hOut.close()
-            
-
+elevdump.GenerateElevdump(output)
